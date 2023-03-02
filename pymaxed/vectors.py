@@ -53,14 +53,14 @@ class Vec:
     def mnts(self) -> Tensor:
         """Target moment set."""
         if isinstance(self.target, list):
-            return torch.tensor(self.target, dtype=self.dtype.float)
+            return torch.tensor(self.target, dtype=self.dtype.float, device=self.device)
         else:
             return self.target
 
     @cached_property
     def mnts_scaled(self) -> Tensor:
         """Scaled target moment set."""
-        scaled = torch.zeros(self.p_order, dtype=self.dtype.float)
+        scaled = torch.zeros(self.p_order, dtype=self.dtype.float, device=self.device)
 
         for i in range(self.p_order):
             scaled[i] = self.mnts[i] * self.alpha ** (self.mono[i, :].sum().item())
@@ -91,12 +91,17 @@ class Vec:
     @cached_property
     def a(self) -> Tensor:
         """Identity matrix of the order of the polynomial basis."""
-        return torch.eye(self.p_order)
+        return torch.eye(self.p_order, dtype=self.dtype.float, device=self.device)
 
     @property
     def dtype(self) -> DType:
         """Data type of `torch.tensor`."""
         return self.mesh.dtype
+
+    @property
+    def device(self) -> torch.device:
+        """Torch device"""
+        return self.mesh.device
 
     @property
     def alpha(self) -> float:
@@ -105,7 +110,13 @@ class Vec:
             1.0
             / (
                 torch.prod(
-                    torch.arange(1, 2 * self.mnts_order, 2, dtype=self.dtype.float)
+                    torch.arange(
+                        1,
+                        2 * self.mnts_order,
+                        2,
+                        dtype=self.dtype.float,
+                        device=self.device,
+                    )
                 )
                 ** (1.0 / (2 * self.mnts_order))
             ).item()
@@ -167,11 +178,11 @@ class Vec:
     def setup_space(self) -> None:
         """Setup the vector space based on the Gauss-Legendre polynomial."""
         self._p_order, self._mono = get_mono(
-            self.mnts_order, self.dim, self.mesh.dtype, self.coord
+            self.mnts_order, self.dim, self.dtype, self.device, self.coord
         )
 
         pw_pairs = [
-            gl_setup(n_gl, lower.item(), upper.item(), self.dtype)
+            gl_setup(n_gl, lower.item(), upper.item(), self.dtype, self.device)
             for n_gl, lower, upper in zip(
                 self.n_gl_nodes, self.mesh.lower, self.mesh.upper
             )
@@ -249,9 +260,13 @@ def _poly_point(coeffs: Tensor, basis: Tensor, p_k: Tensor) -> Tensor:
             orthogonalization applied.
 
     """
-    # Need to be careful here!
+    dim = len(basis.shape) - 1
+    dim_01 = [0, 0] if dim == 1 else [1, 2] if dim == 2 else [1, 3]
+
     return (
-        torch.transpose((p_k @ coeffs).repeat(*basis[0].shape, 1).T, dim0=1, dim1=2)
+        torch.transpose(
+            (p_k @ coeffs).repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
+        )
         * basis
     ).sum(dim=0)
 
@@ -272,19 +287,28 @@ def _poly_target_point(
         Tensor: target polynomials
     """
 
+    dim = len(basis.shape) - 1
+    dim_01 = [0, 0] if dim == 1 else [1, 2] if dim == 2 else [1, 3]
+
     if p2 is None:
         return (
-            torch.transpose(p1[:, t1].repeat(*basis[0].shape, 1).T, dim0=1, dim1=2)
+            torch.transpose(
+                p1[:, t1].repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
+            )
             * basis
         ).sum(dim=0)
     else:
         assert t2 is not None, "t2 must be provided if p2 is given!"
         poly_1 = (
-            torch.transpose(p1[:, t1].repeat(*basis[0].shape, 1).T, dim0=1, dim1=2)
+            torch.transpose(
+                p1[:, t1].repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
+            )
             * basis
         )
         poly_2_sum = (
-            torch.transpose(p2[:, t2].repeat(*basis[0].shape, 1).T, dim0=1, dim1=2)
+            torch.transpose(
+                p2[:, t2].repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
+            )
             * basis
         ).sum(dim=0)
 

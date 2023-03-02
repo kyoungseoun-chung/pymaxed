@@ -12,7 +12,11 @@ from torch import Tensor
 
 
 def get_mono(
-    n_mnts: int, n_dim: int, dtype: DType = DType("double"), coord: str = "xyz"
+    n_mnts: int,
+    n_dim: int,
+    dtype: DType = DType("double"),
+    device: torch.device = torch.device("cpu"),
+    coord: str = "xyz",
 ) -> tuple[int, Tensor]:
     """Get the power of monomial.
 
@@ -57,15 +61,17 @@ def get_mono(
     """
 
     if coord == "xyz":
-        upper = torch.prod(torch.arange(1, n_mnts + n_dim + 1, dtype=dtype.float))
-        lower = torch.prod(torch.arange(1, n_mnts + 1, dtype=dtype.float)) * torch.prod(
-            torch.arange(1, n_dim + 1, dtype=dtype.float)
+        upper = torch.prod(
+            torch.arange(1, n_mnts + n_dim + 1, dtype=dtype.float, device=device)
         )
+        lower = torch.prod(
+            torch.arange(1, n_mnts + 1, dtype=dtype.float, device=device)
+        ) * torch.prod(torch.arange(1, n_dim + 1, dtype=dtype.float))
         k = int(upper / lower)
-        mono = torch.zeros((k, n_dim), dtype=dtype.int)
+        mono = torch.zeros((k, n_dim), dtype=dtype.int, device=device)
 
         for r in range(1, k + 1):
-            mono[r - 1, :] = mono_unrank_grlex(n_dim, r, dtype=dtype.int)
+            mono[r - 1, :] = mono_unrank_grlex(n_dim, r, dtype=dtype.int, device=device)
     else:
         k = 9
         mono = torch.tensor(
@@ -81,12 +87,15 @@ def get_mono(
                 [2, 2],
             ],
             dtype=dtype.int,
+            device=device,
         )
 
     return k, mono
 
 
-def mono_unrank_grlex(m: int, rank: int, dtype: torch.dtype) -> Tensor:
+def mono_unrank_grlex(
+    m: int, rank: int, dtype: torch.dtype, device: torch.device
+) -> Tensor:
     """Calculate monomial at specific rank.
     rank follows Lexicographical order.
 
@@ -98,7 +107,7 @@ def mono_unrank_grlex(m: int, rank: int, dtype: torch.dtype) -> Tensor:
         Tensor: monomial
     """
 
-    x = torch.zeros(m, dtype=dtype)
+    x = torch.zeros(m, dtype=dtype, device=device)
 
     # Special case M = 1.
     # modified by k.chung
@@ -131,7 +140,7 @@ def mono_unrank_grlex(m: int, rank: int, dtype: torch.dtype) -> Tensor:
 
     ks = m - 1
     ns = nm + m - 1
-    xs = torch.zeros(ks, dtype=dtype)
+    xs = torch.zeros(ks, dtype=dtype, device=device)
 
     j = 1
 
@@ -169,7 +178,9 @@ def i4_choose(n: int, k: int) -> float:
     return value
 
 
-def gl_setup(n_deg: int, a: float, b: float, dtype: DType) -> list[Tensor]:
+def gl_setup(
+    n_deg: int, a: float, b: float, dtype: DType, device: torch.device
+) -> list[Tensor]:
     """Wrapper for np.polynomial.legendre.leggauss function.
     This is used to generate node and weight defined by the Gauss-Legendre polynomial.
 
@@ -211,4 +222,65 @@ def gl_setup(n_deg: int, a: float, b: float, dtype: DType) -> list[Tensor]:
         x = (b - a) / 2 * points + (a + b) / 2
         w = (b - a) / 2 * weights
 
-    return [torch.tensor(x, dtype=dtype.float), torch.tensor(w, dtype=dtype.float)]
+    return [
+        torch.tensor(x, dtype=dtype.float, device=device),
+        torch.tensor(w, dtype=dtype.float, device=device),
+    ]
+
+
+def moments_sampling(
+    mnts_bounds: tuple,
+    dtype: DType = DType("double"),
+    device: torch.device = torch.device("cpu"),
+) -> Tensor:
+    r"""Sample the moments from the prescribed moment space. Only works
+    for 1D up-to 4th order moments and the 4th order moments ($p_4$).
+
+    Note:
+        - Moment space has to satisfy following condition:
+
+            .. math::
+                m_4  &\geqq m_3^2 + 1~\text{and} \\
+                    m_3 &= 3,~\text{if}~m_4 = 0
+
+        Reference:
+            McDonald, J., & Torrilhon, M. (2013).
+            Affordable robust moment closures for CFD based on
+            the maximum-entropy hierarchy.
+            Journal of Computational Physics, 251, 500-523.
+
+        - Other than above restriction, moments are sampled
+          uniform randomly within self.mnts_bound
+
+    """
+
+    mnts = torch.zeros(5, dtype=dtype.float, device=device)
+
+    # moments 0th, 1st, and 2nd orders are fixed
+    mnts[0] = 1
+    mnts[1] = 0
+    mnts[2] = 1
+
+    mnts3 = (mnts_bounds[3][1] - mnts_bounds[3][0]) * np.random.rand() + mnts_bounds[3][
+        0
+    ]
+
+    mnts[3] = mnts3
+
+    mnts4 = 0
+
+    while mnts4 < mnts3**2 + 1:
+        mnts4 = (
+            mnts_bounds[4][1] - mnts_bounds[4][0]
+        ) * np.random.rand() + mnts_bounds[4][0]
+
+        if mnts4 == 0:
+            break
+
+    if mnts4 != 0.0:
+        mnts[4] = mnts4
+    else:
+        mnts[3] = 3
+        mnts[4] = 0
+
+    return mnts
