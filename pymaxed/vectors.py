@@ -228,10 +228,10 @@ class Vec:
 
         # torch.meshgrid is by defaults in `ij` order
         # Scaled GL nodes
-        self._x = torch.meshgrid(points)
+        self._x = torch.meshgrid(points, indexing="ij")
 
         # Scaled GL weights
-        w = torch.cat(torch.meshgrid(weights)).view(
+        w = torch.cat(torch.meshgrid(weights, indexing="ij")).view(
             self.dim, *[w.shape[0] for w in weights]
         )
         self._w = torch.prod(w, dim=0)
@@ -271,8 +271,9 @@ def _poly_basis(mono: Tensor, loc: tuple[Tensor, ...], p_order: int) -> Tensor:
     poly_basis = torch.ones_like(loc[0]).repeat(p_order, *[1 for _ in range(dim)])
 
     for i, x in enumerate(loc):
+        repeat_shape = x.T.shape if dim != 1 else x.shape
         x_r = x.repeat(p_order, *[1 for _ in range(dim)])
-        mono_r = mono[:, i].unsqueeze(-1).T.repeat(*x.T.shape, 1).T
+        mono_r = mono[:, i].unsqueeze(-1).T.repeat(*repeat_shape, 1).T
         poly_basis *= x_r**mono_r
 
     return poly_basis

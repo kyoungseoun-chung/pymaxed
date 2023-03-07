@@ -52,17 +52,18 @@ def med_integral(
 
 
 def med_ortho_polynomial(
-    gamma: Tensor, vec: Vec, a: Tensor, re_ortho: int = 1
+    gamma: Tensor, vec: Vec, a: Tensor
 ) -> tuple[Tensor, Tensor, bool]:
     """Polynomial basis orthogonalization using Gram-Schmidt algorithm.
     Designed to be worked in multidimensional phase space (2D and 3D).
+
+    Note:
+        - According to Abramov's paper, with or without re-orthogonalization produces sufficiently orthogonal polynomials for the maximum entropy problems. Therefore, here we omits the re-orthogonalization step.
 
     Args:
         gamma (Tensor): Lagrangian multipliers.
         vec (object): vector space object.
         a (Tensor): polynomial basis.
-        re_ortho (int, optional): number of re-orthogonalization steps.
-            Defaults to 1.
 
     Returns:
         Tensor, Tensor, bool: orthogonalized basis, Lagrangian multiplier,
@@ -74,14 +75,12 @@ def med_ortho_polynomial(
     gamma_init = gamma
 
     for k_mnts in range(vec.p_order):
-        # re-orthogonalize
-        for _ in range(re_ortho):
-            for m_mnts in range(k_mnts):
-                a[:, k_mnts] -= (
-                    med_integral(gamma, vec, a, k_mnts, p, m_mnts) * p[:, m_mnts]
-                )
-                # update gamma according to new a
-                gamma = torch.linalg.inv(a) @ (a_init @ gamma_init)
+        for m_mnts in range(k_mnts):
+            a[:, k_mnts] -= (
+                med_integral(gamma, vec, a, k_mnts, p, m_mnts) * p[:, m_mnts]
+            )
+            # update gamma according to new a
+            gamma = torch.linalg.inv(a) @ (a_init @ gamma_init)
 
         # setting new polynomial basis with new a
         q_ak_ak = med_integral(gamma, vec, a, k_mnts, a, k_mnts)
@@ -102,6 +101,7 @@ def med_ortho_polynomial(
 
 def l_func(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> Tensor:
     r"""Calculate the dual objective function with orthogonalized polynomial.
+    Using the Lagrange multiplier, we can rewrite the dual objective function to unconstrained optimization problem.
 
     Here, we are calculating objective function
 
@@ -120,11 +120,10 @@ def l_func(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> Tensor:
         float: Lagrange function
     """
 
-    # first term
-    poly = vec.get_poly(coeffs, p)
-
     # Objective (lagrangian) function.
-    return (vec.w * torch.exp(poly)).sum() - (coeffs * (mnts_cond @ p)).sum()
+    return (vec.w * torch.exp(vec.get_poly(coeffs, p))).sum() - (
+        coeffs * (mnts_cond @ p)
+    ).sum()
 
 
 def l_jac(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> Tensor:
