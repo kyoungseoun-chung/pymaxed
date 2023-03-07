@@ -2,7 +2,7 @@
 
 > Some core features are implemented in my other project [`pyapes`](https://github.com/kyoungseoun-chung/pyapes). Check the repository for more details. Due to its dependency to `pyapes`, some packages are indirectly inherited from there. (e.g. `torch` and `numpy`)
 
-The library is heavily inspired by `minimize` module from [scipy](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html) and [pytorch-minize](https://github.com/rfeinman/pytorch-minimize).
+The library is heavily inspired by `minimize` module from [SciPy](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html) and [pytorch-minimize](https://github.com/rfeinman/pytorch-minimize).
 
 ## Description
 
@@ -14,4 +14,4 @@ Originally I wrote the code with `numba` library. Here, in this project, I refac
 ## Dependencies
 
 - `python >= 3.10` (but `3.11` is not supported yet due to `torch`)
-- `pyapes`
+- `pyapes` it includes all core packages like `torch`

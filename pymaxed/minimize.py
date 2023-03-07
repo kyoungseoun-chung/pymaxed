@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """Minimize module. Most of the code copied from """
 from typing import Callable
+from typing import TypedDict
 
 import torch
 from torch import Tensor
+from torch._vmap_internals import _vmap
 from torch.optim.lbfgs import _strong_wolfe  # type: ignore
+
+
+class ClosureReturnType(TypedDict):
+    f: Tensor
+    grad: Tensor
+    hess: Tensor | None
 
 
 class ScalarFunction:
@@ -18,75 +26,63 @@ class ScalarFunction:
         self,
         fun: Callable[[Tensor], Tensor],
         x_shape: torch.Size,
-        jac: Callable,
-        hessp=False,
         hess=False,
         twice_diffable=True,
     ):
         self._fun = fun
         self._x_shape = x_shape
-        self._hessp = hessp
         self._hess = hess
         self._I = None
         self._twice_diffable = twice_diffable
         self.nfev = 0
 
-    def fun(self, x):
+    def fun(self, x: Tensor):
+        """Evaluate the objective function."""
         if x.shape != self._x_shape:
             x = x.view(self._x_shape)
         f = self._fun(x)
         if f.numel() != 1:
             raise RuntimeError(
-                "ScalarFunction was supplied a function "
-                "that does not return scalar outputs."
+                "ScalarFunction: a provided function does not return scalar outputs."
             )
         self.nfev += 1
 
         return f
 
-    def closure(self, x):
-        """Evaluate the function, gradient, and hessian/hessian-product
-        This method represents the core function call. It is used for
-        computing newton/quasi newton directions, etc.
-        """
+    def closure(self, x: Tensor) -> ClosureReturnType:
+        """Evaluate the function, gradient, and hessian."""
         x = x.detach().requires_grad_(True)
         with torch.enable_grad():
             f = self.fun(x)
-            grad = autograd.grad(f, x, create_graph=self._hessp or self._hess)[0]
-        if (self._hessp or self._hess) and grad.grad_fn is None:
-            raise RuntimeError(
-                "A 2nd-order derivative was requested but "
-                "the objective is not twice-differentiable."
-            )
-        hessp = None
-        hess = None
-        if self._hessp:
-            hessp = jacobian_linear_operator(x, grad, symmetric=self._twice_diffable)
+            grad = torch.autograd.grad(f, x, create_graph=False)[0]
+
+        hess: Tensor | None = None
+
         if self._hess:
             if self._I is None:
                 self._I = torch.eye(x.numel(), dtype=x.dtype, device=x.device)
-            hvp = lambda v: autograd.grad(grad, x, v, retain_graph=True)[0]
+            hvp = lambda v: torch.autograd.grad(grad, x, v, retain_graph=True)[0]
             hess = _vmap(hvp)(self._I)
 
-        return sf_value(f=f.detach(), grad=grad.detach(), hessp=hessp, hess=hess)
+        return {"f": f.detach(), "grad": grad.detach(), "hess": hess}
 
-    def dir_evaluate(self, x, t, d):
-        """Evaluate a direction and step size.
-        We define a separate "directional evaluate" function to be used
-        for strong-wolfe line search. Only the function value and gradient
-        are needed for this use case, so we avoid computational overhead.
-        """
+    def dir_evaluate(
+        self, x: Tensor, t: Tensor, d: Tensor
+    ) -> dict[str, float | Tensor]:
+        """Evaluate a direction and step size."""
+
         x = x + d.mul(t)
         x = x.detach().requires_grad_(True)
+
         with torch.enable_grad():
             f = self.fun(x)
-        grad = autograd.grad(f, x)[0]
+        grad = torch.autograd.grad(f, x)[0]
 
-        return de_value(f=float(f), grad=grad)
+        return {"f": float(f), "grad": grad}
 
 
-class BFGS:
-    """BFGS class"""
+class Hess:
+    """Hessian evaluation"""
 
     def __init__(self, x: Tensor):
         self.n_updates = 0
@@ -121,7 +117,9 @@ class BFGS:
 
 
 def minimize_bfgs(
-    fun: Callable[[Tensor], dict[str, Tensor]],
+    fun: Callable[[Tensor], Tensor],
+    jac_func: Callable,
+    hess_func: Callable,
     x0: Tensor,
     lr: float = 1.0,
     max_iter: int | None = None,
@@ -171,9 +169,10 @@ def minimize_bfgs(
         print("initial fval: %0.4f" % f)
 
     # initial settings
-    hess = BFGS(x)
+    hess = Hess(x)
     d = g.neg()
-    t = min(1.0, g.norm(p=1).reciprocal()) * lr
+    # t = min(1.0, g.norm(p=1).reciprocal()) * lr
+    t = min(1.0, torch.abs(g).sum().reciprocal().item()) * lr
     n_iter = 0
 
     # BFGS iterations
@@ -228,19 +227,19 @@ def minimize_bfgs(
         # =========================================
 
         # convergence by insufficient progress
-        if (s.norm(p=normp) <= xtol) | ((f_new - f).abs() <= xtol):
+        if (s.norm(p="inf") <= xtol) | ((f_new - f).abs() <= xtol):
             warnflag = 0
             msg = "Minimize: Optimization terminated successfully"
             break
 
         # update state
-        f[...] = f_new
+        f = f_new
         x.copy_(x_new)
         g.copy_(g_new)
         t = lr
 
         # convergence by 1st-order optimality
-        if g.norm(p=normp) <= gtol:
+        if g.norm(p="inf") <= gtol:
             warnflag = 0
             msg = "Minimize: optimization terminated successfully"
             break
