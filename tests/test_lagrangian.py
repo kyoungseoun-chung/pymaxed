@@ -73,11 +73,11 @@ def test_auto_grad_prob() -> None:
         device=mesh.device,
     )
 
-    assert_close(pk, p_old)
-    assert_close(gamma, gamma_old)
     with torch.autograd.set_detect_anomaly(True):
         lag = l_func(gamma, vec, pk, vec.mnts)
-        pass
+        lag.backward()
+    assert_close(pk, p_old)
+    assert_close(gamma, gamma_old)
 
     pass
 
