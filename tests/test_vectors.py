@@ -20,13 +20,15 @@ DTYPE = DType("double")
 
 def test_vector() -> None:
     # Target to be tested
-    target = [1, 0, 1, -0.27, 1.7178, 2, 8, 0, 2]
 
     # Test on 1D space
     mesh = Mesh(Cylinder[0:5, -5:5], None, [50, 100])
     mnts_order = 4
 
-    vec = Vec(mesh, target, mnts_order, [25, 100])
+    target = torch.tensor(
+        [1, 0, 1, -0.27, 1.7178, 2, 8, 0, 2], dtype=mesh.dtype.float, device=mesh.device
+    )
+    vec = Vec(mesh, torch.nn.Parameter(target), mnts_order, [25, 100])
 
     assert vec.dim == 2
     assert vec.coord == "rz"

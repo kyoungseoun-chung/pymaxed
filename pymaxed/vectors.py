@@ -47,15 +47,21 @@ class Vec:
             len(self.n_gl_nodes) == self.dim
         ), f"Vector: {self.n_gl_nodes=} is not compatible with {self.dim=}!"
 
+        # Make sure the target is a tensor and has a consistent dtype and device with mesh
+        if isinstance(self.target, list):
+            self._mnts = torch.tensor(
+                self.target, dtype=self.dtype.float, device=self.device
+            )
+        else:
+            self._mnts = self.target.to(self.device, self.dtype.float)
+
+        # Setup computational vector space
         self.setup_space()
 
     @property
     def mnts(self) -> Tensor:
         """Target moment set."""
-        if isinstance(self.target, list):
-            return torch.tensor(self.target, dtype=self.dtype.float, device=self.device)
-        else:
-            return self.target
+        return self._mnts
 
     @cached_property
     def mnts_scaled(self) -> Tensor:
@@ -152,6 +158,29 @@ class Vec:
         """De-scaled polynomial basis."""
         return self._dp
 
+    @cached_property
+    def init(self) -> torch.nn.Parameter:
+        """Initial guess for the lagrange multiplier. Should be from the Gaussian distribution."""
+        initial_guess = torch.zeros(
+            self.p_order, dtype=self.dtype.float, device=self.device
+        )
+
+        if self.coord == "xyz":
+            if self.dim == 1:
+                initial_guess[2] = -0.5
+            elif self.dim == 2:
+                initial_guess[3] = -0.5
+                initial_guess[5] = -0.5
+            elif self.dim == 3:
+                initial_guess[4] = -0.5
+                initial_guess[6] = -0.5
+                initial_guess[9] = -0.5
+        elif self.coord == "rz":
+            initial_guess[2] = -0.5
+            initial_guess[5] = -0.5
+
+        return torch.nn.Parameter(initial_guess)
+
     def get_poly(self, coeffs: Tensor, p_k: Tensor, origin: bool = False):
         """Construct full polynomials based on the coefficients, p_k, and the polynomial basis. If `origin` is `True`, the polynomial is constructed on the descaled-original space. Otherwise, it is constructed on the scaled GL nodes."""
 
@@ -161,7 +190,7 @@ class Vec:
             return _poly_point(coeffs, self.p, p_k)
 
     def get_poly_target(
-        self, p1: Tensor, t1: int, p2: Tensor | None, t2: int | None
+        self, p1: Tensor, t1: int, p2: Tensor | None = None, t2: int | None = None
     ) -> Tensor:
         """Get polynomial target.
         Args:

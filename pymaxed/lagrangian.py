@@ -15,7 +15,7 @@ def med_integral(
     t1: int,
     p2: Tensor | None = None,
     t2: int | None = None,
-) -> float:
+) -> Tensor:
     r"""Perform the integration of arbitrary function with maximum entropy
     distribution (MED) in N-dimension.
 
@@ -46,19 +46,13 @@ def med_integral(
     # get relevant polynomials
     poly = vec.get_poly(coeffs, p1)
     poly_target = vec.get_poly_target(p1, t1, p2, t2)
-
-    try:
-        # perform integration
-        output = (vec.w * poly_target * torch.exp(poly)).sum().item()
-    except RuntimeWarning:
-        # If warning, return nan
-        output = torch.nan
+    output = (vec.w * poly_target * torch.exp(poly)).sum()
 
     return output
 
 
 def med_ortho_polynomial(
-    gamma: Tensor, vec: Vec, a: Tensor, re_ortho: bool = False
+    gamma: Tensor, vec: Vec, a: Tensor, re_ortho: int = 1
 ) -> tuple[Tensor, Tensor, bool]:
     """Polynomial basis orthogonalization using Gram-Schmidt algorithm.
     Designed to be worked in multidimensional phase space (2D and 3D).
@@ -67,8 +61,8 @@ def med_ortho_polynomial(
         gamma (Tensor): Lagrangian multipliers.
         vec (object): vector space object.
         a (Tensor): polynomial basis.
-        re_ortho (bool, optional): re-orthogonalization flag.
-            Defaults to False.
+        re_ortho (int, optional): number of re-orthogonalization steps.
+            Defaults to 1.
 
     Returns:
         Tensor, Tensor, bool: orthogonalized basis, Lagrangian multiplier,
@@ -77,19 +71,11 @@ def med_ortho_polynomial(
 
     a_init = a.clone()
     p = a.clone()
-
     gamma_init = gamma
-
-    err = False
-
-    if re_ortho:
-        n_r_ortho = 2
-    else:
-        n_r_ortho = 1
 
     for k_mnts in range(vec.p_order):
         # re-orthogonalize
-        for _ in range(n_r_ortho):
+        for _ in range(re_ortho):
             for m_mnts in range(k_mnts):
                 a[:, k_mnts] -= (
                     med_integral(gamma, vec, a, k_mnts, p, m_mnts) * p[:, m_mnts]
@@ -101,30 +87,20 @@ def med_ortho_polynomial(
         q_ak_ak = med_integral(gamma, vec, a, k_mnts, a, k_mnts)
 
         if q_ak_ak <= 0:
-            err = True
-            p[:, k_mnts] = a[:, k_mnts]
-            break
+            return a_init, gamma_init, True
         else:
             p[:, k_mnts] = a[:, k_mnts] / sqrt(q_ak_ak)
 
-    if err is True:
-        # if error detected, just return initial values.
-        # not sure this is necessary or not.
-        p = a_init
-        gamma = gamma_init
-    else:
-        try:
-            # new coefficient according to orthogonalized polynomials
-            # update gamma according to new p
-            gamma = torch.linalg.inv(p) @ (a_init @ gamma_init)
-            err = False
-        except RuntimeError:
-            err = True
-
-    return p, gamma, err
+    try:
+        # new coefficient according to orthogonalized polynomials
+        # update gamma according to new p
+        gamma = torch.linalg.inv(p) @ (a_init @ gamma_init)
+        return p, gamma, False
+    except RuntimeError:
+        return a_init, gamma_init, True
 
 
-def l_func(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> float:
+def l_func(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> Tensor:
     r"""Calculate the dual objective function with orthogonalized polynomial.
 
     Here, we are calculating objective function
@@ -147,20 +123,8 @@ def l_func(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> float:
     # first term
     poly = vec.get_poly(coeffs, p)
 
-    flag = 0
-    # if exception occur, return lagrangian = nan
-    try:
-        func = (vec.w * torch.exp(poly)).sum().item()
-    except RuntimeWarning:
-        flag = 1
-        func = torch.nan
-
-    if flag == 0:
-        # second term
-        for k_mnts in range(vec.p_order):
-            func -= coeffs[k_mnts].item() * (mnts_cond @ p[:, k_mnts]).item()
-
-    return func
+    # Objective (lagrangian) function.
+    return (vec.w * torch.exp(poly)).sum() - (coeffs * (mnts_cond @ p)).sum()
 
 
 def l_jac(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> Tensor:
