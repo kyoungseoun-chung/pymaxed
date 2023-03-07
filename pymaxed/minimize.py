@@ -15,6 +15,18 @@ class ClosureReturnType(TypedDict):
     hess: Tensor | None
 
 
+class OptimReturnType(TypedDict):
+    fun: Tensor
+    x: Tensor
+    grad: Tensor
+    status: int
+    success: bool
+    message: str
+    nit: int
+    nfev: int
+    hess_inv: Tensor
+
+
 class ScalarFunction:
     """Scalar-valued objective function with autograd backend.
     This class provides a general-purpose objective wrapper which will
@@ -66,9 +78,7 @@ class ScalarFunction:
 
         return {"f": f.detach(), "grad": grad.detach(), "hess": hess}
 
-    def dir_evaluate(
-        self, x: Tensor, t: Tensor, d: Tensor
-    ) -> dict[str, float | Tensor]:
+    def dir_evaluate(self, x: Tensor, t: Tensor, d: Tensor) -> tuple[float, Tensor]:
         """Evaluate a direction and step size."""
 
         x = x + d.mul(t)
@@ -78,7 +88,7 @@ class ScalarFunction:
             f = self.fun(x)
         grad = torch.autograd.grad(f, x)[0]
 
-        return {"f": float(f), "grad": grad}
+        return f.item(), grad
 
 
 class Hess:
@@ -118,16 +128,16 @@ class Hess:
 
 def minimize_bfgs(
     fun: Callable[[Tensor], Tensor],
-    jac_func: Callable,
-    hess_func: Callable,
+    # Below two arguments will be needed later on
+    # jac_func: Callable,
+    # hess_func: Callable,
     x0: Tensor,
     lr: float = 1.0,
     max_iter: int | None = None,
     gtol: float = 1e-5,
     xtol: float = 1e-9,
-    normp: float = float("inf"),
     disp: bool | int = False,
-):
+) -> OptimReturnType:
     """Minimize a multivariate function with BFGS or L-BFGS.
     We choose from BFGS/L-BFGS with the `low_mem` argument.
     Parameters
@@ -139,7 +149,6 @@ def minimize_bfgs(
     max_iter (int, optional): maximum number of iterations to perform. Defaults to 200 * x0.numel()
     gtol (float): termination tolerance on 1st-order optimality (gradient norm).
     xtol (float): termination tolerance on function/parameter changes.
-    normp (Number or str): the norm type to use for termination conditions. Can be any value supported by `torch.norm` p argument.
     disp (int or bool): Display (verbosity) level. Set to >0 to print status messages.
 
     Returns
@@ -202,12 +211,12 @@ def minimize_bfgs(
 
         # Use pytorch strong wolfe line search method
         f_new, g_new, t, _ = _strong_wolfe(
-            fun, x.view(-1), t, d.view(-1), f.item(), g.view(-1), gtd
+            sf.dir_evaluate, x.view(-1), t, d.view(-1), f.item(), g.view(-1), gtd
         )
 
         # convert back to torch scalar
-        f_new = torch.as_tensor(f_new, dtype=x.dtype, device=x.device)
-        g_new = g_new.view_as(x)
+        f_new: Tensor = torch.as_tensor(f_new, dtype=x.dtype, device=x.device)
+        g_new: Tensor = g_new.view_as(x)
         x_new = x + d.mul(t)
 
         if disp > 1:
@@ -227,7 +236,7 @@ def minimize_bfgs(
         # =========================================
 
         # convergence by insufficient progress
-        if (s.norm(p="inf") <= xtol) | ((f_new - f).abs() <= xtol):
+        if (torch.linalg.norm(s, ord=torch.inf) <= xtol) | ((f_new - f).abs() <= xtol):
             warnflag = 0
             msg = "Minimize: Optimization terminated successfully"
             break
@@ -239,7 +248,7 @@ def minimize_bfgs(
         t = lr
 
         # convergence by 1st-order optimality
-        if g.norm(p="inf") <= gtol:
+        if torch.linalg.norm(g, ord=torch.inf) <= gtol:
             warnflag = 0
             msg = "Minimize: optimization terminated successfully"
             break
@@ -261,7 +270,7 @@ def minimize_bfgs(
         print(f"\t- Iterations: {n_iter}")
         print(f"\t- Function evaluations: {sf.nfev}")
 
-    result = {
+    return {
         "fun": f,
         "x": x.view_as(x0),
         "grad": g.view_as(x0),
@@ -272,5 +281,3 @@ def minimize_bfgs(
         "nfev": sf.nfev,
         "hess_inv": hess.H.view(2 * x0.shape),
     }
-
-    return result
