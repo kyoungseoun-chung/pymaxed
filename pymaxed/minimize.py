@@ -40,6 +40,7 @@ class OptimReturnType(TypedDict):
 @dataclass
 class FunctionTools:
     """Collection of functions tools for ScalarFunction.
+
     This class should contiains:
         - jac: Jacobian of the objective function.
         - hess: Hessian of the objective function.
@@ -49,6 +50,7 @@ class FunctionTools:
 
     Note:
         - This object is necessary for the re-orthogonalization process.
+        - The `self.hess` is not the same as the `Hess` class. `Hess` class is used in the BFGS steps ans is an approximated evaluation of the Hessian while `self.hess` is the exact Hessian of the objective function that the user should provide.
     """
 
     jac: Callable[..., Tensor]
@@ -59,11 +61,7 @@ class FunctionTools:
 
 
 class ScalarFunction:
-    """Scalar-valued objective function with autograd backend.
-    This class provides a general-purpose objective wrapper which will
-    compute first- and second-order derivatives via autograd as specified
-    by the parameters of __init__.
-    """
+    """Scalar-valued objective function with autograd backend (If `jac` is not explicitly provided via `FunctionTools`. Otherwise use directly `FunctionTools.jac` method)."""
 
     def __init__(
         self,
@@ -113,7 +111,9 @@ class ScalarFunction:
         return f
 
     def hess_cond(self, x: Tensor) -> Tensor:
-        """Condition number of the hessian. If the hessian is not invertible, return nan."""
+        """Condition number of the hessian. If the hessian is not invertible, return nan.
+        This is used to check whether the orthogonalization is needed or not.
+        """
 
         hess = self.hess_eval(x)
 
@@ -168,7 +168,7 @@ class ScalarFunction:
 
 
 class Hess:
-    """Hessian evaluation"""
+    """(Approximated) Hessian evaluation."""
 
     def __init__(self, x: Tensor):
         self.n_updates = 0
@@ -213,13 +213,12 @@ def minimize_bfgs(
     disp: bool | int = False,
     ortho: bool = False,
 ) -> OptimReturnType:
-    """Minimize a multivariate function with BFGS or L-BFGS.
-    We choose from BFGS/L-BFGS with the `low_mem` argument.
+    """Minimize a multivariate function with BFGS.
     Parameters
 
     Note:
-        - Large portion of the code is copied from https://github.com/rfeinman/pytorch-minimize and modified for our purposes.
-        - My implementation of the previous modified scipy version can be found in `pystops_ml` package (private repository).
+        - Large portion of the code is borrowed from https://github.com/rfeinman/pytorch-minimize and modified for our purposes.
+        - My implementation of the previous modified scipy version can be found in `pystops_ml` package (but it is a private repository).
 
     Example:
         >>> def objective(x): ... # target objective function
@@ -312,8 +311,8 @@ def minimize_bfgs(
         )
 
         # convert back to torch scalar
-        f_new: Tensor = torch.as_tensor(f_new, dtype=x.dtype, device=x.device)
-        g_new: Tensor = g_new.view_as(x)
+        f_new = torch.as_tensor(f_new, dtype=x.dtype, device=x.device)
+        g_new = g_new.view_as(x)
         x_new = x + d.mul(t)
 
         if disp > 1:
