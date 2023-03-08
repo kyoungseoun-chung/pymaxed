@@ -214,7 +214,6 @@ def minimize_bfgs(
     ortho: bool = False,
 ) -> OptimReturnType:
     """Minimize a multivariate function with BFGS.
-    Parameters
 
     Note:
         - Large portion of the code is borrowed from https://github.com/rfeinman/pytorch-minimize and modified for our purposes.
