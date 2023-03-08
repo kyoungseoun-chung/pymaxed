@@ -9,7 +9,17 @@ The library is heavily inspired by `minimize` module from [SciPy](https://docs.s
 Package to compute approximated PDF using the Maximum Entropy Distribution (maxed).
 Originally I wrote the code with `numba` library. Here, in this project, I refactored old code and optimize using `torch` so that we can utilize GPU computation.
 
+## Usage
+
+See our [demo case](./demo/maxed.ipynb).
+
 ## Installation
+
+You can install the package using `pip`.
+
+```bash
+python -m pip install pymaxed
+```
 
 ## Dependencies
 
