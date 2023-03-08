@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
 """Minimize module. Most of the code copied from """
+from typing import Any
 from typing import Callable
 from typing import TypedDict
 
 import torch
+from attr import dataclass
 from torch import Tensor
 from torch._vmap_internals import _vmap
 from torch.optim.lbfgs import _strong_wolfe  # type: ignore
 
+from pymaxed.vectors import Vec
+
 
 class ClosureReturnType(TypedDict):
+    """Closure return type.
+
+    Returns:
+        f (Tensor): objective function value
+        grad (Tensor): gradient of the objective function
+    """
+
     f: Tensor
     grad: Tensor
-    hess: Tensor | None
 
 
 class OptimReturnType(TypedDict):
@@ -27,6 +37,17 @@ class OptimReturnType(TypedDict):
     hess_inv: Tensor
 
 
+@dataclass
+class FunctionTools:
+    """Collection of functions tools for ScalarFunction."""
+
+    jac: Callable[..., Tensor]
+    hess: Callable[..., Tensor]
+    ortho_func: Callable[..., Tensor]
+    args: tuple[Any, ...]
+    n_eval: int = 0
+
+
 class ScalarFunction:
     """Scalar-valued objective function with autograd backend.
     This class provides a general-purpose objective wrapper which will
@@ -38,20 +59,35 @@ class ScalarFunction:
         self,
         fun: Callable[[Tensor], Tensor],
         x_shape: torch.Size,
-        hess=False,
-        twice_diffable=True,
+        functools: FunctionTools | None = None,
     ):
+        """Construct ScalarFunction object.
+
+        Args:
+            fun (Callable[[Tensor], Tensor]): target objective function.
+            x_shape (torch.Size): shape of the target variable.
+            functools (FunctionTools, optional): function tools. Defaults to None.
+        """
         self._fun = fun
-        self._x_shape = x_shape
-        self._hess = hess
-        self._I = None
-        self._twice_diffable = twice_diffable
+        self.x_shape = x_shape
+
+        self.I = None
         self.nfev = 0
+        self.functools = functools
+
+        if self.functools is None:
+            self.jac = None
+            self.hess = None
+            self.args = None
+        else:
+            self.jac = self.functools.jac
+            self.hess = self.functools.hess
+            self.args = self.functools.args
 
     def fun(self, x: Tensor):
         """Evaluate the objective function."""
-        if x.shape != self._x_shape:
-            x = x.view(self._x_shape)
+        if x.shape != self.x_shape:
+            x = x.view(self.x_shape)
         f = self._fun(x)
         if f.numel() != 1:
             raise RuntimeError(
@@ -61,22 +97,42 @@ class ScalarFunction:
 
         return f
 
+    def hess_cond(self, x: Tensor) -> Tensor:
+        """Condition number of the hessian. If the hessian is not invertible, return nan."""
+
+        hess = self.hess_eval(x)
+
+        try:
+            return torch.linalg.cond(torch.linalg.inv(hess))
+        except RuntimeError or torch.linalg.LinAlgError:
+            return torch.tensor(torch.nan, dtype=x.dtype, device=x.device)
+
     def closure(self, x: Tensor) -> ClosureReturnType:
         """Evaluate the function, gradient, and hessian."""
+
         x = x.detach().requires_grad_(True)
-        with torch.enable_grad():
+
+        if self.jac is None:
+            with torch.enable_grad():
+                f = self.fun(x)
+                grad = torch.autograd.grad(f, x, create_graph=False)[0]
+        else:
+            assert self.args is not None, "ScalarFunction: args must be provided."
             f = self.fun(x)
-            grad = torch.autograd.grad(f, x, create_graph=False)[0]
+            grad = self.jac(x, *self.args)
 
-        hess: Tensor | None = None
+        return {"f": f.detach(), "grad": grad.detach()}
 
-        if self._hess:
-            if self._I is None:
-                self._I = torch.eye(x.numel(), dtype=x.dtype, device=x.device)
-            hvp = lambda v: torch.autograd.grad(grad, x, v, retain_graph=True)[0]
-            hess = _vmap(hvp)(self._I)
+    def hess_eval(self, x: Tensor) -> Tensor:
+        """Evaluate hessian from the given callable function `self.hess`."""
 
-        return {"f": f.detach(), "grad": grad.detach(), "hess": hess}
+        assert (
+            self.hess is not None
+        ), "ScalarFunction: self.hess must be provided to evaluate hessian."
+        assert self.args is not None, "ScalarFunction: args must be provided."
+        hess = self.hess(x, *self.args)
+
+        return hess
 
     def dir_evaluate(self, x: Tensor, t: Tensor, d: Tensor) -> tuple[float, Tensor]:
         """Evaluate a direction and step size."""
@@ -127,34 +183,40 @@ class Hess:
 
 
 def minimize_bfgs(
-    fun: Callable[[Tensor], Tensor],
-    # Below two arguments will be needed later on
-    # jac_func: Callable,
-    # hess_func: Callable,
+    fun: Callable[..., Tensor],
     x0: Tensor,
+    functools: FunctionTools | None = None,
     lr: float = 1.0,
     max_iter: int | None = None,
     gtol: float = 1e-5,
     xtol: float = 1e-9,
     disp: bool | int = False,
+    ortho: bool = False,
 ) -> OptimReturnType:
     """Minimize a multivariate function with BFGS or L-BFGS.
     We choose from BFGS/L-BFGS with the `low_mem` argument.
     Parameters
 
-    Args:
-    fun (callable): scalar objective function to minimize
-    x0 (Tensor): initialization point
-    lr (float): step size for parameter updates. If using line search, this will be used as the initial step size for the search.
-    max_iter (int, optional): maximum number of iterations to perform. Defaults to 200 * x0.numel()
-    gtol (float): termination tolerance on 1st-order optimality (gradient norm).
-    xtol (float): termination tolerance on function/parameter changes.
-    disp (int or bool): Display (verbosity) level. Set to >0 to print status messages.
+    Note:
+        - Large portion of the code is copied from https://github.com/rfeinman/pytorch-minimize and modified for our purposes.
+        - My implementation of the previous modified scipy version can be found in `pystops_ml` package (private repository).
 
-    Returns
-    -------
-    result : OptimizeResult
-        Result of the optimization routine.
+    Example:
+        >>> def objective(x): ... # target objective function
+        >>> B0 = torch.zeros(...) # target variable
+        >>> res = minimize_bfgs(objective, B0)
+
+    Args:
+        fun (Callable): scalar objective function to minimize
+        x0 (Tensor): initialization point
+        lr (float): step size for parameter updates. If using line search, this will be used as the initial step size for the search.
+        max_iter (int, optional): maximum number of iterations to perform. Defaults to 200 * x0.numel()
+        gtol (float): termination tolerance on 1st-order optimality (gradient norm).
+        xtol (float): termination tolerance on function/parameter changes.
+        disp (int or bool): Display (verbosity) level. Set to >0 to print status messages.
+
+    Returns:
+        result (OptimReturnType): Result of the optimization routine.
     """
     lr = float(lr)
     disp = int(disp)
@@ -163,14 +225,12 @@ def minimize_bfgs(
         max_iter = x0.numel() * 200
 
     # construct scalar objective function
-    sf = ScalarFunction(fun, x0.shape)
-    closure = sf.closure
-    dir_evaluate = sf.dir_evaluate
+    sf = ScalarFunction(fun, x0.shape, functools)
 
     # compute initial f(x) and f'(x)
     x = x0.detach().view(-1).clone(memory_format=torch.contiguous_format)
 
-    res = closure(x)
+    res = sf.closure(x)
     f = res["f"]
     g = res["grad"]
 
@@ -186,29 +246,46 @@ def minimize_bfgs(
 
     # BFGS iterations
     for n_iter in range(1, max_iter + 1):
-        # ==================================
-        #   compute Quasi-Newton direction
-        # ==================================
-
+        # Quasi-Newton direction
         if n_iter > 1:
             d = hess.solve(g)
 
-        # directional derivative
+        # Searching direction
         gtd = g.dot(d)
 
-        # check if directional derivative is below tolerance
-        if gtd > -xtol:
-            warnflag = 4
-            msg = "Minimize: a non-descent direction was encountered."
-            break
+        # Orthogonalization step
+        if ortho:
+            assert (
+                functools is not None
+            ), "Minimize: functools must be provided for orthogonalization."
 
-        # ======================
-        #   update parameter
-        # ======================
-        #  Determine step size via strong-wolfe line search
-        if gtd is None:
-            gtd = g.mul(d).sum()
+            if sf.hess_cond.item() > 10:
+                ortho_func = functools.ortho_func
+                args = list(functools.args)
+                p, x, ortho_err = ortho_func(x, d, args[0], args[1])
 
+                if ortho_err:
+                    warnflag = 5
+                    msg = "Minimize: Orthogonalization failed."
+                    break
+
+                # Update orthogonalized polynomial
+                args[1] = p
+                functools.args = tuple(args)
+
+                d = sf.closure(x)["grad"].neg()
+                lhess = sf.hess_eval(x)
+
+                try:
+                    gtd = torch.linalg.inv(lhess).dot(d)
+                except RuntimeError or torch.linalg.LinAlgError:
+                    warnflag = 5
+                    msg = "Minimize: Orthogonalization failed."
+                    break
+
+                functools.n_eval += 1
+
+        # Update parameter
         # Use pytorch strong wolfe line search method
         f_new, g_new, t, _ = _strong_wolfe(
             sf.dir_evaluate, x.view(-1), t, d.view(-1), f.item(), g.view(-1), gtd
@@ -222,23 +299,16 @@ def minimize_bfgs(
         if disp > 1:
             print("iter %3d - fval: %0.4f" % (n_iter, f_new))
 
-        # ================================
-        #   update hessian approximation
-        # ================================
-
         s = x_new.sub(x)
         y = g_new.sub(g)
 
+        # Update Hessian approximation
         hess.update(s, y)
 
-        # =========================================
-        #   check conditions and update buffers
-        # =========================================
-
-        # convergence by insufficient progress
+        # Convergence check
         if (torch.linalg.norm(s, ord=torch.inf) <= xtol) | ((f_new - f).abs() <= xtol):
             warnflag = 0
-            msg = "Minimize: Optimization terminated successfully"
+            msg = "Minimize: Optimization terminated successfully."
             break
 
         # update state
@@ -247,13 +317,13 @@ def minimize_bfgs(
         g.copy_(g_new)
         t = lr
 
-        # convergence by 1st-order optimality
+        # Convergence by 1st-order optimality
         if torch.linalg.norm(g, ord=torch.inf) <= gtol:
             warnflag = 0
-            msg = "Minimize: optimization terminated successfully"
+            msg = "Minimize: optimization terminated successfully."
             break
 
-        # precision loss; exit
+        # Precision loss; exit
         if ~f.isfinite():
             warnflag = 2
             msg = "Minimize: desired error not necessarily achieved due to precision loss."

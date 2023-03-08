@@ -12,8 +12,8 @@ from torch.testing import assert_close  # type: ignore
 from pymaxed.lagrangian import l_func
 from pymaxed.lagrangian import l_hess
 from pymaxed.lagrangian import l_jac
-from pymaxed.lagrangian import med_integral
-from pymaxed.lagrangian import med_ortho_polynomial
+from pymaxed.lagrangian import ortho_polynomial
+from pymaxed.lagrangian import quad_integral
 from pymaxed.vectors import Vec
 
 
@@ -24,7 +24,7 @@ def test_auto_grad_prob() -> None:
     mesh = Mesh(Box[-10:10], None, [100])
 
     vec = Vec(mesh, target, n_mnts, [100])
-    pk, gamma, _ = med_ortho_polynomial(vec.init, vec, vec.a)
+    pk, gamma, _ = ortho_polynomial(vec.init, vec, vec.a)
 
     p_old = torch.tensor(
         [
@@ -106,13 +106,13 @@ def test_lagrangian() -> None:
             vec.get_poly(coeff_init.detach(), vec.a),
             vec.get_poly_target(vec.a, p),
         )
-        test = med_integral(coeff_init, vec, vec.a, p)
+        test = quad_integral(coeff_init, vec, vec.a, p)
         assert target == pytest.approx(test.detach())
 
     poly = ((vec.a @ coeff_init).repeat(*vec.p[0].shape, 1).T * vec.p).sum(dim=0)
 
     med = (vec.w * torch.exp(poly)).sum()
-    pk, gamma, err = med_ortho_polynomial(coeff_init, vec, vec.a, False)
+    pk, gamma, err = ortho_polynomial(coeff_init, vec, vec.a)
     lag = l_func(gamma, vec, pk, vec.mnts)
     jac = l_jac(gamma, vec, pk, vec.mnts)
     hes = l_hess(gamma, vec, pk, vec.mnts)

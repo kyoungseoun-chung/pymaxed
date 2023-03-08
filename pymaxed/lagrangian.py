@@ -8,7 +8,7 @@ from torch import Tensor
 from pymaxed.vectors import Vec
 
 
-def med_integral(
+def quad_integral(
     coeffs: Tensor,
     vec: Vec,
     p1: Tensor,
@@ -16,7 +16,7 @@ def med_integral(
     p2: Tensor | None = None,
     t2: int | None = None,
 ) -> Tensor:
-    r"""Perform the integration of arbitrary function with maximum entropy
+    r"""Perform the quadrature integration (using the Gauss-Legendre polynomial) of arbitrary function with maximum entropy
     distribution (MED) in N-dimension.
 
     Here, we are performing,
@@ -51,9 +51,7 @@ def med_integral(
     return output
 
 
-def med_ortho_polynomial(
-    gamma: Tensor, vec: Vec, a: Tensor
-) -> tuple[Tensor, Tensor, bool]:
+def ortho_polynomial(gamma: Tensor, vec: Vec, a: Tensor) -> tuple[Tensor, Tensor, bool]:
     """Polynomial basis orthogonalization using Gram-Schmidt algorithm.
     Designed to be worked in multidimensional phase space (2D and 3D).
 
@@ -77,13 +75,13 @@ def med_ortho_polynomial(
     for k_mnts in range(vec.p_order):
         for m_mnts in range(k_mnts):
             a[:, k_mnts] -= (
-                med_integral(gamma, vec, a, k_mnts, p, m_mnts) * p[:, m_mnts]
+                quad_integral(gamma, vec, a, k_mnts, p, m_mnts) * p[:, m_mnts]
             )
             # update gamma according to new a
             gamma = torch.linalg.inv(a) @ (a_init @ gamma_init)
 
         # setting new polynomial basis with new a
-        q_ak_ak = med_integral(gamma, vec, a, k_mnts, a, k_mnts)
+        q_ak_ak = quad_integral(gamma, vec, a, k_mnts, a, k_mnts)
 
         if q_ak_ak <= 0:
             return a_init, gamma_init, True
@@ -148,7 +146,7 @@ def l_jac(coeffs: Tensor, vec: Vec, p: Tensor, mnts_cond: Tensor) -> Tensor:
     jac = torch.zeros(vec.p_order, dtype=vec.dtype.float)
 
     for k_mnts in range(vec.p_order):
-        q_p_k = med_integral(coeffs, vec, p, k_mnts)
+        q_p_k = quad_integral(coeffs, vec, p, k_mnts)
         jac[k_mnts] = q_p_k - (mnts_cond @ p[:, k_mnts])
 
     return jac
@@ -179,6 +177,6 @@ def l_hess(coeffs: Tensor, vec: Vec, p: Tensor, _) -> Tensor:
 
     for k_mnts in range(vec.p_order):
         for m_mnts in range(vec.p_order):
-            hess[k_mnts, m_mnts] = med_integral(coeffs, vec, p, k_mnts, p, m_mnts)
+            hess[k_mnts, m_mnts] = quad_integral(coeffs, vec, p, k_mnts, p, m_mnts)
 
     return hess
