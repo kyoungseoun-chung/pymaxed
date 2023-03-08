@@ -94,10 +94,12 @@ class Vec:
         """Sets of the monomial. See `pymaxed.tools.get_mono` for more details."""
         return self._mono
 
-    @cached_property
+    @property
     def a(self) -> Tensor:
         """Identity matrix of the order of the polynomial basis."""
-        return torch.eye(self.p_order, dtype=self.dtype.float, device=self.device)
+        return torch.eye(
+            self.p_order, dtype=self.dtype.float, device=self.device
+        ).detach()
 
     @property
     def dtype(self) -> DType:

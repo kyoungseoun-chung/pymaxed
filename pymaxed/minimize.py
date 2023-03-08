@@ -7,10 +7,7 @@ from typing import TypedDict
 import torch
 from attr import dataclass
 from torch import Tensor
-from torch._vmap_internals import _vmap
 from torch.optim.lbfgs import _strong_wolfe  # type: ignore
-
-from pymaxed.vectors import Vec
 
 
 class ClosureReturnType(TypedDict):
@@ -28,6 +25,7 @@ class ClosureReturnType(TypedDict):
 class OptimReturnType(TypedDict):
     fun: Tensor
     x: Tensor
+    p: Tensor
     grad: Tensor
     status: int
     success: bool
@@ -35,15 +33,24 @@ class OptimReturnType(TypedDict):
     nit: int
     nfev: int
     hess_inv: Tensor
+    n_ortho_eval: int
 
 
 @dataclass
 class FunctionTools:
-    """Collection of functions tools for ScalarFunction."""
+    """Collection of functions tools for ScalarFunction.
+    This class should contiains:
+        - jac: Jacobian of the objective function.
+        - hess: Hessian of the objective function.
+        - ortho_func: Orthogonalization function.
+        - args: arguments for the above functions. Typically, `vec, p, mnts_scaled`
+        - n_eval: number of function evaluations.
+
+    """
 
     jac: Callable[..., Tensor]
     hess: Callable[..., Tensor]
-    ortho_func: Callable[..., Tensor]
+    ortho_func: Callable[..., tuple[Tensor, Tensor, float]]
     args: tuple[Any, ...]
     n_eval: int = 0
 
@@ -88,7 +95,12 @@ class ScalarFunction:
         """Evaluate the objective function."""
         if x.shape != self.x_shape:
             x = x.view(self.x_shape)
-        f = self._fun(x)
+
+        if self.args is None:
+            f = self._fun(x)
+        else:
+            f = self._fun(x, *self.args)
+
         if f.numel() != 1:
             raise RuntimeError(
                 "ScalarFunction: a provided function does not return scalar outputs."
@@ -130,7 +142,7 @@ class ScalarFunction:
             self.hess is not None
         ), "ScalarFunction: self.hess must be provided to evaluate hessian."
         assert self.args is not None, "ScalarFunction: args must be provided."
-        hess = self.hess(x, *self.args)
+        hess = self.hess(x, *self.args).detach()
 
         return hess
 
@@ -140,11 +152,16 @@ class ScalarFunction:
         x = x + d.mul(t)
         x = x.detach().requires_grad_(True)
 
-        with torch.enable_grad():
+        if self.jac is None:
+            with torch.enable_grad():
+                f = self.fun(x)
+                grad = torch.autograd.grad(f, x)[0]
+        else:
             f = self.fun(x)
-        grad = torch.autograd.grad(f, x)[0]
+            assert self.args is not None, "ScalarFunction: args must be provided."
+            grad = self.jac(x, *self.args)
 
-        return f.item(), grad
+        return f.detach().item(), grad.detach()
 
 
 class Hess:
@@ -343,6 +360,9 @@ def minimize_bfgs(
     return {
         "fun": f,
         "x": x.view_as(x0),
+        "p": functools.args[1]
+        if functools is not None
+        else torch.zeros_like(x.view_as(x0)),
         "grad": g.view_as(x0),
         "status": warnflag,
         "success": (warnflag == 0),
@@ -350,4 +370,5 @@ def minimize_bfgs(
         "nit": n_iter,
         "nfev": sf.nfev,
         "hess_inv": hess.H.view(2 * x0.shape),
+        "n_ortho_eval": functools.n_eval if functools is not None else -1,
     }

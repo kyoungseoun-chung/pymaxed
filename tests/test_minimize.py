@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 import torch
+from pyapes.core.geometry import Box
+from pyapes.core.mesh import Mesh
 from torch import Tensor
 from torch.testing import assert_close  # type: ignore
 
+from pymaxed.maxed import Maxed
 from pymaxed.minimize import minimize_bfgs
+from pymaxed.pdfs import bi_normal_ref_1
+from pymaxed.vectors import Vec
 
 
 N = 100
@@ -24,3 +29,23 @@ def test_minimize() -> None:
 
     assert res["success"] == True
     assert_close(res["x"], trueB, atol=1e-4, rtol=1e-4)
+
+
+def test_maxed_minimize() -> None:
+    target = [1, 0, 1, -0.27, 1.7178]
+    mesh = Mesh(Box[-5:5], None, [100])
+
+    vec = Vec(mesh, target, 4, [100])
+
+    maxed = Maxed(vec)
+
+    maxed.solve()
+    # Results from my old code
+    coeffs_old = torch.tensor(
+        [-1.60707008, 0.70435461, 1.21316491, -0.43266241, -0.54965037],
+        dtype=vec.dtype.float,
+        device=vec.device,
+    )
+
+    assert_close(maxed.coeffs, coeffs_old, atol=1e-4, rtol=1e-4)
+    assert_close(vec.mnts, maxed.mnts_computed, atol=1e-4, rtol=1e-4)
