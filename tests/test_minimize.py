@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 import torch
 from pyapes.core.geometry import Box
+from pyapes.core.geometry import Cylinder
 from pyapes.core.mesh import Mesh
 from torch import Tensor
 from torch.testing import assert_close  # type: ignore
 
 from pymaxed.maxed import Maxed
 from pymaxed.minimize import minimize_bfgs
-from pymaxed.pdfs import bi_normal_ref_1
 from pymaxed.vectors import Vec
 
 
@@ -49,3 +49,12 @@ def test_maxed_minimize() -> None:
 
     assert_close(maxed.coeffs, coeffs_old, atol=1e-4, rtol=1e-4)
     assert_close(vec.mnts, maxed.mnts_computed, atol=1e-4, rtol=1e-4)
+
+    target = [1, 0, 1, -0.27, 1.7178, 2, 8, 0, 2]
+    mesh = Mesh(Cylinder[0:10, -10:10], None, [128, 256])
+
+    vec = Vec(mesh, target, 4, [50, 100])
+    maxed = Maxed(vec)
+
+    maxed.solve()
+    assert_close(vec.mnts, maxed.mnts_computed, atol=1e-2, rtol=1e-2)
