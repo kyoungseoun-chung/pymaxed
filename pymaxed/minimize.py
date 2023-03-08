@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Minimize module. Most of the code copied from """
 from typing import Any
 from typing import Callable
 from typing import TypedDict
@@ -23,6 +22,8 @@ class ClosureReturnType(TypedDict):
 
 
 class OptimReturnType(TypedDict):
+    """Optimization result return types."""
+
     fun: Tensor
     x: Tensor
     p: Tensor
@@ -46,6 +47,8 @@ class FunctionTools:
         - args: arguments for the above functions. Typically, `vec, p, mnts_scaled`
         - n_eval: number of function evaluations.
 
+    Note:
+        - This object is necessary for the re-orthogonalization process.
     """
 
     jac: Callable[..., Tensor]
@@ -270,7 +273,7 @@ def minimize_bfgs(
         # Searching direction
         gtd = g.dot(d)
 
-        # Orthogonalization step
+        # Orthogonalization step using the modified Gram-schmidt algorithm
         if ortho:
             assert (
                 functools is not None
