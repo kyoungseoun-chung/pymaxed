@@ -103,10 +103,12 @@ class Maxed:
                     self.coeffs, self.vec, self.vec.a, i_mnts
                 )
             self.mnts_computed = mnts_computed.detach()
+            self.success = True
         else:
             self.coeffs = None
             self.dist = None
             self.mnts_computed = None
+            self.success = False
 
     def dist_from_coeffs(self, coeffs: Tensor | None = None) -> Tensor:
         if coeffs is None:

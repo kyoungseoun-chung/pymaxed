@@ -47,7 +47,7 @@ To work with `pymaxed` package, you need `pyapes` package since it contains `geo
     mesh = Mesh(Box[-5:5], None, [100]) # If you want to work on axisymmetric domain, use Cylinder instead
     vec = Vec(mesh, target, 4, [100])
   ```
-  
+
 * Step 3: create `Maxed` object and solve the optimization problem.
 
   ```python
