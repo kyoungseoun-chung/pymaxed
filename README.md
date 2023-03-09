@@ -11,7 +11,41 @@ Originally I wrote the code with `numba` library. Here, in this project, I refac
 
 ## Usage
 
-See our [demo case](./demo/maxed.ipynb).
+To work with `pymaxed` package, you need `pyapes` package since it contains `geometry` and `mesh` related tools.
+
+* Step 0: Import relevant modules
+
+  ```python
+  from pymaxed.maxed import Maxed
+  from pymaxed.vectors import Vec
+  from pyapes.core.mesh import Mesh
+  from pyapes.core.geometry import Box, Cylinder
+  ```
+
+* Step 1: set up the target set of moments. The number of moments will be the degree of freedom to be used in the reconstruction of the distribution.
+
+  ```python
+  target = [1, 0, 1, -0.27, 1.7178]
+  ```
+
+* Step 2: construct mesh and vector space.
+
+  ```python
+    mesh = Mesh(Box[-5:5], None, [100]) # If you want to work on axisymmetric domain, use Cylinder instead
+    vec = Vec(mesh, target, 4, [100])
+  ```
+  
+* Step 3: create `Maxed` object and solve the optimization problem.
+
+  ```python
+    maxed = Maxed(vec)
+    maxed.solve()
+    # After calling solve() method, you can access obtained coefficients via maxed.coeffs
+    # And reconstructed PDF via maxed.dist
+    # Reconstructed PDF (MaxEd) lies on vec.dv space.
+  ```
+
+For more details, check our [demo case](./demo/maxed.ipynb).
 
 ## Installation
 
