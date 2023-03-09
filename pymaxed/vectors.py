@@ -272,10 +272,12 @@ def _poly_basis(mono: Tensor, loc: tuple[Tensor, ...], p_order: int) -> Tensor:
     # shape = p_order x loc[0].shape
     poly_basis = torch.ones_like(loc[0]).repeat(p_order, *[1 for _ in range(dim)])
 
+    perm = [i for i in range(dim, -1, -1)]
+
     for i, x in enumerate(loc):
         repeat_shape = x.T.shape if dim != 1 else x.shape
         x_r = x.repeat(p_order, *[1 for _ in range(dim)])
-        mono_r = mono[:, i].unsqueeze(-1).T.repeat(*repeat_shape, 1).T
+        mono_r = mono[:, i].unsqueeze(-1).T.repeat(*repeat_shape, 1).permute(perm)
         poly_basis *= x_r**mono_r
 
     return poly_basis
@@ -292,15 +294,14 @@ def _poly_point(coeffs: Tensor, basis: Tensor, p_k: Tensor) -> Tensor:
             orthogonalization applied.
 
     """
-    dim = len(basis.shape) - 1
-    dim_01 = [0, 0] if dim == 1 else [1, 2] if dim == 2 else [1, 3]
+    # Leading dimension of the basis is the length of the total moments
+    dim = basis.ndim - 1
 
-    return (
-        torch.transpose(
-            (p_k @ coeffs).repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
-        )
-        * basis
-    ).sum(dim=0)
+    perm = [dim] + [i for i in range(0, dim)]
+
+    return (((p_k @ coeffs).repeat(*basis[0].shape, 1)).permute(perm) * basis).sum(
+        dim=0
+    )
 
 
 def _poly_target_point(
