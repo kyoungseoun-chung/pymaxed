@@ -9,11 +9,24 @@ The library is heavily inspired by `minimize` module from [SciPy](https://docs.s
 Package to compute approximated PDF using the Maximum Entropy Distribution (maxed).
 Originally I wrote the code with `numba` library. Here, in this project, I refactored old code and optimize using `torch` so that we can utilize GPU computation.
 
+## Dependencies
+
+- `python >= 3.10` (but `3.11` is not supported yet due to `torch`)
+- `pyapes`
+
+## Installation
+
+You can install the package using `pip`.
+
+```bash
+python -m pip install pymaxed
+```
+
 ## Usage
 
 To work with `pymaxed` package, you need `pyapes` package since it contains `geometry` and `mesh` related tools.
 
-* Step 0: Import relevant modules
+* Step 0: import relevant modules
 
   ```python
   from pymaxed.maxed import Maxed
@@ -46,16 +59,3 @@ To work with `pymaxed` package, you need `pyapes` package since it contains `geo
   ```
 
 For more details, check our [demo case](./demo/maxed.ipynb).
-
-## Installation
-
-You can install the package using `pip`.
-
-```bash
-python -m pip install pymaxed
-```
-
-## Dependencies
-
-- `python >= 3.10` (but `3.11` is not supported yet due to `torch`)
-- `pyapes` it includes all core packages like `torch`
