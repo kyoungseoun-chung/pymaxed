@@ -2,10 +2,19 @@
 """Module contains some reference PDFs."""
 from math import pi
 from math import sqrt
+from typing import TypedDict
 
 import torch
 from pyapes.core.backend import DType
 from torch import Tensor
+
+
+class RefPDFReturnType(TypedDict):
+    """Return type of the reference PDFs."""
+
+    mnts: list[float]
+    vel: Tensor
+    pdf: Tensor
 
 
 def bi_normal_ref_1(
@@ -15,7 +24,7 @@ def bi_normal_ref_1(
     bound: float = 10.0,
     n_vel: int = 500,
     dtype: DType = DType("double"),
-) -> dict[str, Tensor | list[Tensor]]:
+) -> RefPDFReturnType:
     """Get 1D reference bi-normal distribution and calculate moments accordingly.
     Space is symmetric around 0 with the bounds of +- `bound`. The peaks of the PDF are equally separated by `m`.
     """
@@ -34,7 +43,8 @@ def bi_normal_ref_1(
 
     p_order = mnts_order + 1
     mnts = [
-        torch.trapz((vel**i_mnts) * pdf_bi_norm, vel) for i_mnts in range(p_order)
+        torch.trapz((vel**i_mnts) * pdf_bi_norm, vel).item()
+        for i_mnts in range(p_order)
     ]
 
     return {"mnts": mnts, "vel": vel, "pdf": pdf_bi_norm}
@@ -48,7 +58,7 @@ def bi_normal_ref_2(
     bound: float = 10,
     n_vel: int = 500,
     dtype: DType = DType("double"),
-) -> dict[str, Tensor | list[Tensor]]:
+) -> RefPDFReturnType:
     """Get 1D reference bi-normal distribution and calculate moments accordingly.
     Space is symmetric around 0 with the bounds of +- `bound`. The peaks of the PDF are equally separated by `m`.
     """
@@ -61,7 +71,8 @@ def bi_normal_ref_2(
 
     p_order = mnts_order + 1
     mnts = [
-        torch.trapz((vel**i_mnts) * pdf_bi_norm, vel) for i_mnts in range(p_order)
+        torch.trapz((vel**i_mnts) * pdf_bi_norm, vel).item()
+        for i_mnts in range(p_order)
     ]
 
     return {"mnts": mnts, "vel": vel, "pdf": pdf_bi_norm}

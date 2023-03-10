@@ -1355,6 +1355,17 @@ python-versions = ">=3.6"
 plugins = ["importlib-metadata"]
 
 [[package]]
+name = "pymyplot"
+version = "0.2.6"
+description = "Correction of usefull plotting setup for matplotlib"
+category = "main"
+optional = false
+python-versions = ">=3.9,<4.0"
+
+[package.dependencies]
+matplotlib = ">=3.6.0,<4.0.0"
+
+[[package]]
 name = "pyparsing"
 version = "3.0.9"
 description = "pyparsing module - Classes and methods to define and execute parsing grammars"
@@ -1924,7 +1935,7 @@ python-versions = ">=3.7"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "abe1db41bb800931343eed230cf5f0a03b73db1634a637dbf652e885edcceda8"
+content-hash = "4e07c19b54e433efeade17aafc318763e0df0d160ef727ba9e8bea44e2937f74"
 
 [metadata.files]
 absl-py = [
@@ -2975,6 +2986,10 @@ pyevtk = [
 Pygments = [
     {file = "Pygments-2.14.0-py3-none-any.whl", hash = "sha256:fa7bd7bd2771287c0de303af8bfdfc731f51bd2c6a47ab69d117138893b82717"},
     {file = "Pygments-2.14.0.tar.gz", hash = "sha256:b3ed06a9e8ac9a9aae5a6f5dbe78a8a58655d17b43b93c078f094ddc476ae297"},
+]
+pymyplot = [
+    {file = "pymyplot-0.2.6-py3-none-any.whl", hash = "sha256:daacb0c6ea45b65705b863af0dc6b5ad4013bbd2de85d2b957831ed4e81f69fb"},
+    {file = "pymyplot-0.2.6.tar.gz", hash = "sha256:0cc7b9c6529524e8eeffa74feb9abdba56570eeac0b298311ad5cd80128297ea"},
 ]
 pyparsing = [
     {file = "pyparsing-3.0.9-py3-none-any.whl", hash = "sha256:5026bae9a10eeaefb61dab2f09052b9f4307d44aee4eda64b309723d8d206bbc"},
