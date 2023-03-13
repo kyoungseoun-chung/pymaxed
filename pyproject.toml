@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pymaxed"
-version = "0.1.2"
+version = "0.1.3"
 description = "Python package for the maximum entroy distribution."
 authors = ["Kyoungseoun Chung <kyoungseoun.chung@gmail.com>"]
 
