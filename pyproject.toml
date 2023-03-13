@@ -7,7 +7,7 @@ authors = ["Kyoungseoun Chung <kyoungseoun.chung@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.10"
 pymyplot = "^0.2.7"
-pyapes = "^0.0.3"
+pyapes = "^0.0.4"
 
 [tool.poetry.dev-dependencies]
 black = "^22.12.0"
