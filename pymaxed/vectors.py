@@ -321,28 +321,17 @@ def _poly_target_point(
     """
 
     dim = len(basis.shape) - 1
-    dim_01 = [0, 0] if dim == 1 else [1, 2] if dim == 2 else [1, 3]
+    perm = [dim] + list(range(0, dim))
 
     if p2 is None:
-        return (
-            torch.transpose(
-                p1[:, t1].repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
-            )
-            * basis
-        ).sum(dim=0)
+        pass
+        return ((p1[:, t1].repeat(*basis[0].shape, 1)).permute(perm) * basis).sum(dim=0)
     else:
-        assert t2 is not None, "t2 must be provided if p2 is given!"
-        poly_1 = (
-            torch.transpose(
-                p1[:, t1].repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
-            )
-            * basis
+        if dim == 2:
+            pass
+        poly_1 = (p1[:, t1].repeat(*basis[0].shape, 1)).permute(perm) * basis
+        poly_2_sum = ((p2[:, t2].repeat(*basis[0].shape, 1)).permute(perm) * basis).sum(
+            dim=0
         )
-        poly_2_sum = (
-            torch.transpose(
-                p2[:, t2].repeat(*basis[0].shape, 1).T, dim0=dim_01[0], dim1=dim_01[1]
-            )
-            * basis
-        ).sum(dim=0)
 
         return (poly_1 * poly_2_sum).sum(dim=0)
