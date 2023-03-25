@@ -6,7 +6,7 @@ authors = ["Kyoungseoun Chung <kyoungseoun.chung@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
-pyapes = "^0.1.0"
+pyapes = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 black = "^22.12.0"

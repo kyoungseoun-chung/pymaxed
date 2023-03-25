@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import torch
-from pyapes.core.geometry import Box
-from pyapes.core.geometry import Cylinder
-from pyapes.core.mesh import Mesh
+from pyapes.geometry import Box
+from pyapes.geometry import Cylinder
+from pyapes.mesh import Mesh
 from torch import Tensor
 from torch.testing import assert_close  # type: ignore
 

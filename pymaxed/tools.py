@@ -7,7 +7,7 @@ Note:
 """
 import numpy as np
 import torch
-from pyapes.core.backend import DType
+from pyapes.backend import DType
 from torch import Tensor
 
 

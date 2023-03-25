@@ -5,8 +5,8 @@ from functools import cached_property
 from math import pi
 
 import torch
-from pyapes.core.backend import DType
-from pyapes.core.mesh import Mesh
+from pyapes.backend import DType
+from pyapes.mesh import Mesh
 from torch import Tensor
 
 from pymaxed.tools import get_mono

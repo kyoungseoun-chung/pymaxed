@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from pyapes.core.backend import DType
+from pyapes.backend import DType
 
 from pymaxed.tools import get_mono
 

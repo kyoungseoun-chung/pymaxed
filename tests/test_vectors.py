@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 import torch
-from pyapes.core.backend import DType
-from pyapes.core.geometry import Cylinder
-from pyapes.core.mesh import Mesh
+from pyapes.backend import DType
+from pyapes.geometry import Cylinder
+from pyapes.mesh import Mesh
 from torch import Tensor
 from torch.testing import assert_close  # type: ignore
 
